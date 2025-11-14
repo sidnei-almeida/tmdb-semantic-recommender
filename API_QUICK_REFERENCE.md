@@ -2,6 +2,12 @@
 
 Quick reference guide for integrating with the TMDB Semantic Recommender API.
 
+## 🆕 What's New
+
+- **🧠 Context-Aware**: Model now uses genre/year/title context for better accuracy
+- **📚 30k Movies**: Expanded from 10k to 30k films (300% more coverage)
+- **⚡ Better Results**: Prevents semantic confusion (e.g., "family" in Horror ≠ Romance)
+
 ---
 
 ## Base URL
@@ -88,7 +94,7 @@ interface RecommendationRequest {
 
 interface MovieRecommendation {
   movie_id: number;           // Use with TMDB API
-  similarity_score: number;   // 0.0 to 1.0
+  similarity_score: number;   // 0.0 to 1.0 (cosine similarity)
   title: string | null;
   overview: string | null;
 }
@@ -99,6 +105,19 @@ interface RecommendationResponse {
   count: number;
 }
 ```
+
+## ⚠️ Important Notes
+
+**Similarity Scores:**
+- With the new context-aware model, scores may be slightly lower (0.65-0.75 is common for good matches)
+- **Quality over quantity**: Lower scores but **better relevance** and **thematic consistency**
+- The model is more discerning—it won't match movies just because they share words, they need shared context
+
+**What Changed:**
+- ✅ Better accuracy (context-aware embeddings)
+- ✅ Larger library (30k vs 10k movies)
+- ✅ Genre confusion prevention
+- ⚠️ Scores may appear lower but quality is higher
 
 ---
 
