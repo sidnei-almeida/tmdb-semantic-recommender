@@ -252,13 +252,19 @@ class ModelService:
     def recommend(
         self,
         synopsis: str,
+        genre: str | None = None,
+        year: int | None = None,
+        title: str | None = None,
         top_k: int = 10,
     ) -> List[dict]:
         """
-        Get movie recommendations based on synopsis.
+        Get movie recommendations based on synopsis with optional context metadata.
         
         Args:
-            synopsis: Movie synopsis
+            synopsis: Movie synopsis/overview (required)
+            genre: Movie genre(s) for context-aware recommendations (optional, e.g., "Horror, Mystery")
+            year: Release year for context-aware recommendations (optional)
+            title: Movie title for context-aware recommendations (optional)
             top_k: Number of recommendations to return
             
         Returns:
@@ -270,8 +276,27 @@ class ModelService:
         if not synopsis or len(synopsis.strip()) < 10:
             raise ValueError("Synopsis must be at least 10 characters long")
         
-        # Encode the synopsis
-        query_embedding = self._encode_text(synopsis)
+        # Build context-enriched query (the "metadata soup")
+        # Format: "Genre: {genres}. Year: {year}. Title: {title}. Overview: {overview}"
+        query_parts = []
+        
+        if genre:
+            query_parts.append(f"Genre: {genre}")
+        
+        if year:
+            query_parts.append(f"Year: {year}")
+        
+        if title:
+            query_parts.append(f"Title: {title}")
+        
+        # Always include overview
+        query_parts.append(f"Overview: {synopsis}")
+        
+        # Join with ". " separator to match training format
+        enriched_query = ". ".join(query_parts)
+        
+        # Encode the enriched query
+        query_embedding = self._encode_text(enriched_query)
         
         # Search in Annoy index
         if self.index is None:

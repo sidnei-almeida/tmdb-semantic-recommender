@@ -16,8 +16,26 @@ class RecommendationRequest(BaseModel):
         ...,
         min_length=10,
         max_length=5000,
-        description="Movie synopsis to find similar movies",
-        example="A young wizard discovers his magical heritage and must face the dark lord who killed his parents.",
+        description="Movie synopsis/overview to find similar movies",
+        example="When Ellen, the matriarch of the Graham family, passes away, her daughter's family begins to unravel cryptic and increasingly terrifying secrets about their ancestry.",
+    )
+    genre: str | None = Field(
+        None,
+        description="Movie genre(s) for context-aware recommendations (e.g., 'Horror, Mystery, Thriller')",
+        example="Horror, Mystery, Thriller",
+    )
+    year: int | None = Field(
+        None,
+        ge=1888,
+        le=2100,
+        description="Release year of the movie for context-aware recommendations",
+        example=2018,
+    )
+    title: str | None = Field(
+        None,
+        max_length=200,
+        description="Movie title for context-aware recommendations",
+        example="Hereditary",
     )
     top_k: int = Field(
         default=10,
@@ -48,7 +66,7 @@ class RecommendationResponse(BaseModel):
     "/recommend",
     response_model=RecommendationResponse,
     summary="Get movie recommendations based on synopsis",
-    description="Given a movie synopsis, returns similar movies based on semantic similarity using BERT embeddings.",
+    description="Given a movie synopsis (and optionally genre, year, title), returns similar movies based on context-aware semantic similarity. The API will enrich the query with metadata if provided for better accuracy.",
 )
 async def get_recommendations(
     request: RecommendationRequest,
@@ -74,14 +92,29 @@ async def get_recommendations(
         )
     
     try:
-        # Get recommendations
+        # Get recommendations (with context-aware metadata if provided)
         recommendations = model_service.recommend(
             synopsis=request.synopsis,
+            genre=request.genre,
+            year=request.year,
+            title=request.title,
             top_k=request.top_k,
         )
         
+        # Build query string for response (showing enriched query if metadata provided)
+        query_display = request.synopsis
+        if request.genre or request.year or request.title:
+            parts = []
+            if request.genre:
+                parts.append(f"Genre: {request.genre}")
+            if request.year:
+                parts.append(f"Year: {request.year}")
+            if request.title:
+                parts.append(f"Title: {request.title}")
+            query_display = ". ".join(parts) + f". Overview: {request.synopsis}"
+        
         return RecommendationResponse(
-            query=request.synopsis,
+            query=query_display,
             recommendations=recommendations,
             count=len(recommendations),
         )
