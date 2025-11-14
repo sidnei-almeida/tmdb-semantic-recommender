@@ -132,16 +132,22 @@ class ModelService:
         input_ids = np.array([encoding.ids], dtype=np.int64)
         attention_mask = np.array([encoding.attention_mask], dtype=np.int64)
         
-        # Get input names from the model
+        # Get input names from the model to see what inputs are required
         input_names = [input.name for input in self.session.get_inputs()]
         
         # Prepare inputs in the correct order
         inputs = {}
         for name in input_names:
-            if "input_ids" in name.lower():
+            name_lower = name.lower()
+            if "input_ids" in name_lower:
                 inputs[name] = input_ids
-            elif "attention" in name.lower() or "mask" in name.lower():
+            elif "attention" in name_lower or "mask" in name_lower:
                 inputs[name] = attention_mask
+            elif "token_type_ids" in name_lower or "segment" in name_lower:
+                # BERT requires token_type_ids for some models
+                # For single sentence tasks, use all zeros
+                token_type_ids = np.zeros_like(input_ids, dtype=np.int64)
+                inputs[name] = token_type_ids
         
         # Run inference
         outputs = self.session.run(None, inputs)
