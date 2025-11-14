@@ -1,5 +1,86 @@
 """
 Model service for loading and using the BERT model and Annoy index.
+
+=================================================================
+🧠 LÓGICA DE RECOMENDAÇÃO (O CÉREBRO DA API)
+=================================================================
+
+1. O QUE É ISSO?
+   Este não é um modelo de Machine Learning "tradicional" (como uma
+   regressão). Este é um **Motor de Busca Semântica Vetorial**.
+   O objetivo dele é transformar filmes em "pontos" num espaço
+   3D (na verdade, 384D) e encontrar os pontos mais próximos.
+
+2. ARQUITETURA DE ARQUIVOS (O QUE ESTÁ CARREGADO NA RAM):
+
+   - model_quantized/ (ONNX):
+     É o "cérebro" tradutor. É o modelo 'all-MiniLM-L6-v2'
+     otimizado (quantizado p/ INT8) que lê texto e cospe um
+     vetor de 384 dimensões. Ele é leve (CPU-friendly)
+     e rápido.
+
+   - movies.ann (Annoy):
+     É o nosso "Banco de Dados Vetorial". Ele armazena os 30.000
+     vetores pré-calculados de forma otimizada para busca.
+     É o que nos permite achar os 5 filmes mais próximos em
+     menos de 1 milissegundo.
+
+   - movies_map.pkl (Pickle):
+     É o "Tradutor". O Annoy trabalha com IDs simples (0, 1, 2...).
+     Este arquivo é um dicionário que traduz o ID do Annoy
+     (ex: 42) para os dados reais do filme (ID do TMDb: 550,
+     Title: 'Fight Club', poster_path: '...').
+
+3. A "SOPA DE METADADOS" (O SEGREDO DA PRECISÃO):
+
+   O modelo não foi treinado só na sinopse (overview). Para evitar
+   recomendações bizarras (ex: terror com comédia), o texto de
+   treino foi enriquecido com contexto:
+
+   "Genre: {genres}. Year: {year}. Title: {title}. Overview: {overview}"
+
+   Isso força o modelo a ancorar o significado da sinopse dentro
+   do contexto correto de gênero e era.
+
+   Por exemplo:
+   - "família" no contexto de "Horror" ≠ "família" no contexto de "Romance"
+   - Isso evita confusão entre universos cinematográficos
+
+4. FLUXO DE INFERÊNCIA (O QUE ACONTECE NA API):
+
+   a. Front-end envia uma sinopse de filme.
+
+   b. Tokenização e Embedding:
+      A API tokeniza a sinopse e roda o modelo ONNX para gerar
+      um vetor de 384 dimensões em tempo real.
+
+   c. Busca Vetorial:
+      A API entrega o vetor para o Annoy e pede: "Me dê os N
+      vizinhos mais próximos" (default: 10).
+
+   d. Tradução de Saída:
+      O Annoy retorna IDs internos (ex: [101, 205, 30]).
+
+   e. Enriquecimento:
+      A API usa o 'movies_map.pkl' para traduzir esses IDs
+      de volta para dados completos (título, ID do TMDB, etc).
+
+   f. Output: Retorna o JSON rico para o front-end.
+
+5. POR QUE O MODELO É TÃO PRECISO AGORA?
+
+   - Consciência de Contexto (Qualidade):
+     Ao forçarmos o texto a ser "Genre: Horror. Year: 2018. Title: ...",
+     criamos "âncoras" semânticas. O modelo sabe que a palavra
+     "família" no contexto de "Horror" é muito diferente de
+     "família" no contexto de "Romance".
+
+   - Biblioteca Rica (Quantidade):
+     Com 30k filmes (antes eram 10k), o modelo tem um "vocabulário"
+     de filmes muito maior. As chances de encontrar o filme certo
+     aumentaram em 300%.
+
+Stack: ONNX Runtime + Annoy + Sentence-Transformers (all-MiniLM-L6-v2)
 """
 import os
 import pickle

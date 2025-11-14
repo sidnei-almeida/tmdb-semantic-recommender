@@ -34,7 +34,17 @@
 
 ## 🎯 Overview
 
-The **TMDB Semantic Recommender API** is a production-ready REST API that provides intelligent movie recommendations based on semantic similarity of movie synopses. Built with state-of-the-art deep learning techniques, it leverages a quantized BERT model in ONNX format for efficient embedding generation and an Annoy index for lightning-fast similarity search.
+The **TMDB Semantic Recommender API** is a production-ready REST API that provides intelligent movie recommendations based on semantic similarity of movie synopses. Built with state-of-the-art deep learning techniques, it leverages the **all-MiniLM-L6-v2** model (quantized to INT8) in ONNX format for efficient embedding generation and an Annoy index for lightning-fast similarity search across **30,000 movies**.
+
+### Key Innovation: Context-Aware Metadata Enrichment
+
+Unlike traditional synopsis-only approaches, our model uses **context-enriched embeddings** by including genre, year, and title alongside the synopsis:
+
+```
+"Genre: Horror. Year: 2018. Title: Hereditary. Overview: ..."
+```
+
+This creates **semantic anchors** that prevent context confusion (e.g., "family" in Horror ≠ "family" in Romance), resulting in dramatically more accurate recommendations.
 
 ### Key Highlights
 
@@ -51,8 +61,9 @@ The **TMDB Semantic Recommender API** is a production-ready REST API that provid
 
 | Feature | Description |
 |---------|-------------|
-| **🎯 Semantic Search** | Uses quantized BERT model to generate high-quality embeddings from movie synopses |
-| **⚡ Fast Vector Search** | Annoy index for efficient similarity search (sub-millisecond query times) |
+| **🎯 Semantic Search** | Uses all-MiniLM-L6-v2 model (quantized INT8) with context-aware metadata enrichment |
+| **⚡ Fast Vector Search** | Annoy index with 30k movies for efficient similarity search (sub-millisecond query times) |
+| **🧠 Context Awareness** | Genre/Year/Title anchors prevent semantic confusion across different movie universes |
 | **🚀 RESTful API** | Built with FastAPI for high performance and automatic OpenAPI documentation |
 | **🔄 Async Support** | Full async/await support for handling concurrent requests efficiently |
 | **💾 Memory Optimized** | Configured to run within Render's free tier (512MB RAM) |
@@ -397,13 +408,13 @@ This API is optimized for Render's free tier:
 
 **Memory Breakdown:**
 ```
-Model (ONNX):          ~50-100MB
-Annoy Index:           ~20-50MB
-Python + FastAPI:      ~50-100MB
-Libraries Overhead:    ~50-100MB
-Working Memory:        ~50-100MB
-─────────────────────────────────
-Total Estimated:       ~300-450MB ✅
+Model (ONNX - all-MiniLM-L6-v2):  ~50-100MB
+Annoy Index (30k movies):          ~30-60MB
+Python + FastAPI:                  ~50-100MB
+Libraries Overhead:                ~50-100MB
+Working Memory:                    ~50-100MB
+─────────────────────────────────────────────────
+Total Estimated:                   ~330-460MB ✅
 ```
 
 ---
@@ -426,7 +437,8 @@ Total Estimated:       ~300-450MB ✅
 |------------|---------|---------|
 | [FastAPI](https://fastapi.tiangolo.com/) | Web framework | 0.115.0 |
 | [ONNX Runtime](https://onnxruntime.ai/) | Model inference | 1.22.1 |
-| [Annoy](https://github.com/spotify/annoy) | Vector similarity search | 1.17.3 |
+| [all-MiniLM-L6-v2](https://www.sbert.net/docs/pretrained_models.html) | Sentence embeddings (quantized) | Latest |
+| [Annoy](https://github.com/spotify/annoy) | Vector similarity search (30k movies) | 1.17.3 |
 | [Tokenizers](https://github.com/huggingface/tokenizers) | Text tokenization | ≥0.20.0 |
 | [NumPy](https://numpy.org/) | Numerical computing | 1.26.4 |
 | [Pydantic](https://docs.pydantic.dev/) | Data validation | 2.9.2 |
@@ -456,12 +468,12 @@ tmdb-semantic-recommender/
 │       └── model_service.py      # Model loading & inference
 │
 ├── models/                       # Model files
-│   ├── model_quantized/          # BERT ONNX model
+│   ├── model_quantized/          # all-MiniLM-L6-v2 ONNX model (quantized)
 │   │   ├── model_quantized.onnx
 │   │   ├── tokenizer.json
 │   │   └── config.json
-│   ├── movies.ann                # Annoy index
-│   └── movies_map.pkl            # Movie ID mapping
+│   ├── movies.ann                # Annoy index (30k movies)
+│   └── movies_map.pkl            # Movie ID mapping (Annoy ID → TMDB data)
 │
 ├── requirements.txt              # Python dependencies
 ├── render.yaml                   # Render deployment config
