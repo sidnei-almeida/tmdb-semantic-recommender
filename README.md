@@ -142,7 +142,7 @@ The API will be available at `http://localhost:8000`
 ### Base URL
 
 ```
-Production: https://your-api.onrender.com
+Production: https://tmdb-semantic-recommender.onrender.com
 Local:      http://localhost:8000
 ```
 
@@ -482,7 +482,7 @@ import requests
 
 # Get recommendations
 response = requests.post(
-    "https://your-api.onrender.com/api/v1/recommend",
+    "https://tmdb-semantic-recommender.onrender.com/api/v1/recommend",
     json={
         "synopsis": "A space opera about rebels fighting an empire",
         "top_k": 10
@@ -497,7 +497,7 @@ for movie in data["recommendations"]:
 ### JavaScript/TypeScript Client
 
 ```javascript
-const response = await fetch('https://your-api.onrender.com/api/v1/recommend', {
+const response = await fetch('https://tmdb-semantic-recommender.onrender.com/api/v1/recommend', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
