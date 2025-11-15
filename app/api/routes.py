@@ -66,7 +66,7 @@ class RecommendationResponse(BaseModel):
     "/recommend",
     response_model=RecommendationResponse,
     summary="Get movie recommendations based on synopsis",
-    description="Given a movie synopsis (and optionally genre, year, title), returns similar movies based on context-aware semantic similarity. The API will enrich the query with metadata if provided for better accuracy.",
+    description="Given a movie synopsis (and optionally genre, year, title), returns Top 30 similar movies based on context-aware semantic similarity. The API always returns 30 results for the front-end to perform hybrid re-ranking. The API will enrich the query with metadata if provided for better accuracy.",
 )
 async def get_recommendations(
     request: RecommendationRequest,

@@ -259,16 +259,18 @@ class ModelService:
     ) -> List[dict]:
         """
         Get movie recommendations based on synopsis with optional context metadata.
+        Sempre retorna Top 30 resultados do BERT para o front-end fazer re-ranking híbrido.
         
         Args:
             synopsis: Movie synopsis/overview (required)
             genre: Movie genre(s) for context-aware recommendations (optional, e.g., "Horror, Mystery")
             year: Release year for context-aware recommendations (optional)
             title: Movie title for context-aware recommendations (optional)
-            top_k: Number of recommendations to return
+            top_k: Parâmetro ignorado - sempre retorna Top 30 para re-ranking no front-end
             
         Returns:
-            List of recommendation dictionaries with movie_id, similarity_score, title, and overview
+            List of 30 recommendation dictionaries with movie_id, similarity_score (BERT puro), title, and overview
+            O front-end deve fazer o re-ranking híbrido usando os gêneros dos filmes.
         """
         if not self.is_loaded:
             raise ValueError("Model not loaded")
@@ -302,10 +304,13 @@ class ModelService:
         if self.index is None:
             raise ValueError("Index not loaded")
         
-        # Get nearest neighbors (top_k + 1 to account for potential self-match)
+        # Busca Top 30 para o front-end fazer re-ranking híbrido
+        # O front-end terá os gêneros e fará o re-ranking, então retornamos mais resultados
+        recall_top_k = 30  # Sempre retorna Top 30 para re-ranking no front-end
+        
         neighbors, distances = self.index.get_nns_by_vector(
             query_embedding.tolist(),
-            n=top_k,
+            n=recall_top_k,
             include_distances=True,
         )
         
