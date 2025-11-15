@@ -138,9 +138,21 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 
+# Download model files from GitHub Releases
+# See MODEL_FILES_SETUP.md for detailed instructions
+# Quick download:
+# wget https://github.com/sidnei-almeida/tmdb-semantic-recommender/releases/download/v0.0.1/model_quantized.zip
+# wget https://github.com/sidnei-almeida/tmdb-semantic-recommender/releases/download/v0.0.1/movies.ann
+# wget https://github.com/sidnei-almeida/tmdb-semantic-recommender/releases/download/v0.0.1/movies_map.pkl
+# unzip model_quantized.zip -d models/
+# mv movies.ann models/
+# mv movies_map.pkl models/
+
 # Run the application
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+**⚠️ Important**: Before running the API, you need to download the model files from [GitHub Releases](https://github.com/sidnei-almeida/tmdb-semantic-recommender/releases/tag/v0.0.1). See [MODEL_FILES_SETUP.md](MODEL_FILES_SETUP.md) for detailed instructions.
 
 The API will be available at `http://localhost:8000`
 

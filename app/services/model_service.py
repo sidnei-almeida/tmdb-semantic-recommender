@@ -85,7 +85,7 @@ Stack: ONNX Runtime + Annoy + Sentence-Transformers (all-MiniLM-L6-v2)
 import os
 import pickle
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import onnxruntime as ort
@@ -123,6 +123,7 @@ class ModelService:
         self.tokenizer: Tokenizer | None = None
         self.index: AnnoyIndex | None = None
         self.movies_map: dict | None = None
+        self.tmdb_to_annoy: dict[int, int] | None = None  # Reverse index: tmdb_id -> annoy_id
         self._is_loaded = False
     
     @property
@@ -188,6 +189,16 @@ class ModelService:
             with open(self.movies_map_path, "rb") as f:
                 self.movies_map = pickle.load(f)
             
+            # Build reverse index: tmdb_id -> annoy_id
+            print("Building reverse index (tmdb_id -> annoy_id)...")
+            self.tmdb_to_annoy = {}
+            for annoy_id, movie_data in self.movies_map.items():
+                if isinstance(movie_data, dict):
+                    tmdb_id = movie_data.get("tmdb_id")
+                    if tmdb_id is not None:
+                        self.tmdb_to_annoy[tmdb_id] = annoy_id
+            print(f"Reverse index built: {len(self.tmdb_to_annoy)} movies indexed")
+            
             self._is_loaded = True
             print("All components loaded successfully!")
         
@@ -249,94 +260,193 @@ class ModelService:
         
         return embedding[0]  # Return first (and only) embedding
     
-    def recommend(
+    def build_soup_from_payload(
         self,
-        synopsis: str,
-        genre: str | None = None,
-        year: int | None = None,
         title: str | None = None,
-        top_k: int = 10,
-    ) -> List[dict]:
+        overview: str | None = None,
+        genres: List[str] | None = None,
+        directors: List[str] | None = None,
+        studios: List[str] | None = None,
+        countries: List[str] | None = None,
+        year: int | None = None,
+        keywords: List[str] | None = None,
+    ) -> str:
         """
-        Get movie recommendations based on synopsis with optional context metadata.
-        Sempre retorna Top 30 resultados do BERT para o front-end fazer re-ranking híbrido.
+        Constrói a "Sopa de Metadados" no formato exato usado no treinamento.
+        
+        Ordem de importância:
+        1. Keywords (Top 5)
+        2. Genres (Top 3)
+        3. Directors (Top 2)
+        4. Studios (Top 2)
+        5. Countries (Top 1)
+        6. Year, Title, Overview
         
         Args:
-            synopsis: Movie synopsis/overview (required)
-            genre: Movie genre(s) for context-aware recommendations (optional, e.g., "Horror, Mystery")
-            year: Release year for context-aware recommendations (optional)
-            title: Movie title for context-aware recommendations (optional)
-            top_k: Parâmetro ignorado - sempre retorna Top 30 para re-ranking no front-end
+            title: Movie title
+            overview: Movie overview/synopsis
+            genres: List of genres
+            directors: List of directors
+            studios: List of studios
+            countries: List of countries
+            year: Release year
+            keywords: List of keywords
             
         Returns:
-            List of 30 recommendation dictionaries with movie_id, similarity_score (BERT puro), title, and overview
-            O front-end deve fazer o re-ranking híbrido usando os gêneros dos filmes.
+            Metadata soup string in training format
+        """
+        soup_parts = []
+        
+        # 1. Keywords (Top 5)
+        if keywords:
+            for keyword in keywords[:5]:
+                if keyword and keyword.strip():
+                    soup_parts.append(f"Keyword: {keyword.strip()}")
+        
+        # 2. Genres (Top 3)
+        if genres:
+            for genre in genres[:3]:
+                if genre and genre.strip():
+                    soup_parts.append(f"Genre: {genre.strip()}")
+        
+        # 3. Directors (Top 2)
+        if directors:
+            for director in directors[:2]:
+                if director and director.strip():
+                    soup_parts.append(f"Director: {director.strip()}")
+        
+        # 4. Studios (Top 2)
+        if studios:
+            for studio in studios[:2]:
+                if studio and studio.strip():
+                    soup_parts.append(f"Studio: {studio.strip()}")
+        
+        # 5. Countries (Top 1)
+        if countries:
+            country = countries[0]
+            if country and country.strip():
+                soup_parts.append(f"Country: {country.strip()}")
+        
+        # 6. Year, Title, Overview
+        if year:
+            soup_parts.append(f"Year: {year}")
+        
+        if title and title.strip():
+            soup_parts.append(f"Title: {title.strip()}")
+        
+        if overview and overview.strip():
+            soup_parts.append(f"Overview: {overview.strip()}")
+        
+        return ". ".join(soup_parts)
+    
+    def recommend(
+        self,
+        tmdb_id: int,
+        top_k: int = 50,
+        # Cold Start fields
+        title: str | None = None,
+        overview: str | None = None,
+        genres: List[str] | None = None,
+        directors: List[str] | None = None,
+        studios: List[str] | None = None,
+        countries: List[str] | None = None,
+        year: int | None = None,
+        keywords: List[str] | None = None,
+    ) -> List[dict]:
+        """
+        Get movie recommendations using Warm Start or Cold Start.
+        
+        Warm Start: If tmdb_id exists in movies_map, uses pre-computed embedding from Annoy.
+        Cold Start: If tmdb_id not found, builds metadata soup from payload and generates embedding on-the-fly.
+        
+        Args:
+            tmdb_id: TMDB movie ID
+            top_k: Number of recommendations to return (default: 50)
+            title: Movie title (required for Cold Start)
+            overview: Movie overview/synopsis (required for Cold Start)
+            genres: List of genres (required for Cold Start)
+            directors: List of directors (optional for Cold Start)
+            studios: List of studios (optional for Cold Start)
+            countries: List of countries (optional for Cold Start)
+            year: Release year (optional for Cold Start)
+            keywords: List of keywords (optional for Cold Start)
+            
+        Returns:
+            List of recommendation dictionaries with tmdb_id, title, year, poster_path, genres_list
         """
         if not self.is_loaded:
             raise ValueError("Model not loaded")
         
-        if not synopsis or len(synopsis.strip()) < 10:
-            raise ValueError("Synopsis must be at least 10 characters long")
-        
-        # Build context-enriched query (the "metadata soup")
-        # Format: "Genre: {genres}. Year: {year}. Title: {title}. Overview: {overview}"
-        query_parts = []
-        
-        if genre:
-            query_parts.append(f"Genre: {genre}")
-        
-        if year:
-            query_parts.append(f"Year: {year}")
-        
-        if title:
-            query_parts.append(f"Title: {title}")
-        
-        # Always include overview
-        query_parts.append(f"Overview: {synopsis}")
-        
-        # Join with ". " separator to match training format
-        enriched_query = ". ".join(query_parts)
-        
-        # Encode the enriched query
-        query_embedding = self._encode_text(enriched_query)
-        
-        # Search in Annoy index
         if self.index is None:
             raise ValueError("Index not loaded")
         
-        # Busca Top 30 para o front-end fazer re-ranking híbrido
-        # O front-end terá os gêneros e fará o re-ranking, então retornamos mais resultados
-        recall_top_k = 30  # Sempre retorna Top 30 para re-ranking no front-end
+        if self.movies_map is None:
+            raise ValueError("Movies map not loaded")
         
+        # ============================================================
+        # WARM START vs COLD START
+        # ============================================================
+        query_embedding: np.ndarray | None = None
+        
+        # Check if tmdb_id exists in movies_map (Warm Start)
+        if self.tmdb_to_annoy and tmdb_id in self.tmdb_to_annoy:
+            # WARM START: Use pre-computed embedding from Annoy
+            annoy_id = self.tmdb_to_annoy[tmdb_id]
+            query_embedding = np.array(self.index.get_item_vector(annoy_id))
+        else:
+            # COLD START: Build metadata soup and generate embedding
+            if not overview or not overview.strip():
+                raise ValueError("overview is required for Cold Start (tmdb_id not found in movies_map)")
+            
+            # Build metadata soup in exact training format
+            soup = self.build_soup_from_payload(
+                title=title,
+                overview=overview,
+                genres=genres,
+                directors=directors,
+                studios=studios,
+                countries=countries,
+                year=year,
+                keywords=keywords,
+            )
+            
+            if not soup or len(soup.strip()) < 10:
+                raise ValueError("Metadata soup is too short. Provide at least overview.")
+            
+            # Generate embedding from soup
+            query_embedding = self._encode_text(soup)
+        
+        # ============================================================
+        # BUSCA VETORIAL (RETRIEVAL)
+        # ============================================================
         neighbors, distances = self.index.get_nns_by_vector(
             query_embedding.tolist(),
-            n=recall_top_k,
+            n=top_k,
             include_distances=True,
         )
         
-        # Convert distances to similarity scores (angular distance -> cosine similarity)
-        # Angular distance = arccos(cosine_similarity)
-        # So: similarity = 1 - (angular_distance / pi)
-        similarity_scores = [1 - (d / np.pi) for d in distances]
-        
-        # Build recommendations
+        # ============================================================
+        # ENRIQUECIMENTO DOS RESULTADOS
+        # ============================================================
         recommendations = []
-        for movie_id, similarity in zip(neighbors, similarity_scores):
-            movie_data = {
-                "movie_id": int(movie_id),
-                "similarity_score": float(similarity),
+        for annoy_id in neighbors:
+            if annoy_id not in self.movies_map:
+                continue
+            
+            movie_info = self.movies_map[annoy_id]
+            if not isinstance(movie_info, dict):
+                continue
+            
+            # Build response in required format
+            recommendation = {
+                "tmdb_id": int(movie_info.get("tmdb_id", 0)),
+                "title": str(movie_info.get("title", "")),
+                "year": str(movie_info.get("year", "")),
+                "poster_path": movie_info.get("poster_path"),
+                "genres_list": movie_info.get("genres_list", []),
             }
             
-            # Add title and overview if available in movies_map
-            if self.movies_map is not None and movie_id in self.movies_map:
-                movie_info = self.movies_map[movie_id]
-                if isinstance(movie_info, dict):
-                    movie_data["title"] = movie_info.get("title")
-                    movie_data["overview"] = movie_info.get("overview")
-                else:
-                    movie_data["title"] = str(movie_info) if movie_info else None
-            
-            recommendations.append(movie_data)
+            recommendations.append(recommendation)
         
         return recommendations
 

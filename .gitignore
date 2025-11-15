@@ -49,9 +49,14 @@ Thumbs.db
 .coverage
 htmlcov/
 
-# Model files (if too large, uncomment)
-# models/
-# *.pkl
-# *.ann
-# *.onnx
+# Model files - Available in GitHub Releases
+# Download from: https://github.com/sidnei-almeida/tmdb-semantic-recommender/releases
+# See MODEL_FILES_SETUP.md for download instructions
+models/movies.ann
+models/movies_map.pkl
+models/model_quantized.zip
+models/model_quantized/
+*.ann
+*.pkl
+*.onnx
 
