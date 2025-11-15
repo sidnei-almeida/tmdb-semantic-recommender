@@ -3,9 +3,13 @@ services:
     name: tmdb-semantic-recommender
     env: python
     plan: free
-    buildCommand: chmod +x build.sh && ./build.sh
+    buildCommand: pip install -r requirements.txt && chmod +x build.sh && bash build.sh
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      # Uses latest release by default (fetches automatically from GitHub API)
+      # Optional: Override with a specific release tag if needed
+      # - key: MODEL_RELEASE_TAG
+      #   value: v0.0.1
 

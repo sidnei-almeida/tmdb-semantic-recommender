@@ -134,8 +134,28 @@ class ModelService:
     def load(self) -> None:
         """Load the model, tokenizer, index, and movies map."""
         try:
+            # Debug: Print current working directory and paths
+            import os
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Model path: {self.model_path} (exists: {self.model_path.exists()})")
+            print(f"Index path: {self.index_path} (exists: {self.index_path.exists()})")
+            print(f"Movies map path: {self.movies_map_path} (exists: {self.movies_map_path.exists()})")
+            
+            # List models directory if it exists
+            models_dir = self.model_path.parent.parent
+            if models_dir.exists():
+                print(f"Contents of {models_dir}:")
+                for item in models_dir.iterdir():
+                    if item.is_file():
+                        print(f"  📄 {item.name} ({item.stat().st_size / 1024 / 1024:.2f} MB)")
+                    elif item.is_dir():
+                        print(f"  📁 {item.name}/")
+            
             # Load ONNX model with memory optimizations for Render (512MB limit)
             print(f"Loading ONNX model from {self.model_path}")
+            
+            if not self.model_path.exists():
+                raise FileNotFoundError(f"Model file not found at {self.model_path.absolute()}")
             
             # Configure session options to minimize memory usage for Render's 512MB limit
             session_options = ort.SessionOptions()
@@ -176,7 +196,14 @@ class ModelService:
             # Load Annoy index
             print(f"Loading Annoy index from {self.index_path}")
             if not self.index_path.exists():
-                raise FileNotFoundError(f"Index not found at {self.index_path}")
+                # Additional debugging
+                print(f"Index path absolute: {self.index_path.absolute()}")
+                print(f"Index path parent exists: {self.index_path.parent.exists()}")
+                if self.index_path.parent.exists():
+                    print(f"Files in {self.index_path.parent}:")
+                    for item in self.index_path.parent.iterdir():
+                        print(f"  - {item.name} ({'file' if item.is_file() else 'dir'})")
+                raise FileNotFoundError(f"Index not found at {self.index_path.absolute()}")
             
             self.index = AnnoyIndex(settings.EMBEDDING_SIZE, "angular")
             self.index.load(str(self.index_path))
